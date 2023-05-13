@@ -1,0 +1,22 @@
+name: SAGAconf
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.9
+  # conda-forge packages
+  - conda-forge::numpy
+  - conda-forge::scipy
+  - conda-forge::pandas
+  # bioconda packages
+  - bioconda::bedtools
+  - bioconda::macs2
+  - bioconda::gmtk
+  - bioconda::genomedata
+  - bioconda::segway
+  - bioconda::segtools
+  - bioconda::ucsc-bedclip
+  - bioconda::ucsc-bedgraphtobigwig
+  - bioconda::ucsc-bedtobigbed
+  - bioconda::ucsc-bigwigtobedgraph
