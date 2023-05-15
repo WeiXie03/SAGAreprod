@@ -236,6 +236,16 @@ def search_encode(cell, download_dir, target_assembly="GRCh38", check_availabili
             download_response = requests.get(download_link, allow_redirects=True)
             open(save_dir_name, 'wb').write(download_response.content)
 
+def save_get_resp(download_link: str, save_path: str) -> bool:
+    """
+    Save a GET request response from `download_link` directly to file.
+    Returns whether successful.
+    """
+    with requests.Session() as req_session:
+        download_response = req_session.get(download_link, allow_redirects=True)
+    open(save_path, 'wb').write(download_response.content)
+    return True
+
 def get_data_from_csv(csvfile ="data_summary.csv", downloaddir="files/", bw2bg=True):
     summary = pd.read_csv(csvfile).drop("Unnamed: 0", axis=1)
     summary.Celltype = summary.Celltype.astype(str)
@@ -256,34 +266,31 @@ def get_data_from_csv(csvfile ="data_summary.csv", downloaddir="files/", bw2bg=T
         if os.path.exists("""{}/{}/{}/""".format(downloaddir, ct, assay)) == False:
             os.mkdir("""{}/{}/{}/""".format(downloaddir, ct, assay))
 
+        assay_dir = """{}/{}/{}""".format(downloaddir, ct, assay)
+
         #bam##########################################################################################
-        save_dir_name = """{}/{}/{}/{}""".format(downloaddir, ct, assay, fileslist[0]+".bam")
-        download_link = """https://www.encodeproject.org/files/{}/@@download/{}.{}""".format(
-            fileslist[0], fileslist[0], "bam"
-        )
-        print("downloading from ", download_link)
-        # download_link = """https://www.encodeproject.org/files/{}""".format(
-        #     fileslist[0]
-        # )
-        with requests.Session() as req_session:
-            download_response = req_session.get(download_link, allow_redirects=True)
-        open(save_dir_name, 'wb').write(download_response.content)
+        save_path = assay_dir + "/" + fileslist[0] + ".bam"
+        if os.path.isfile(save_path):
+            print(f"{save_path} already exists, skipping")
+        else:
+            download_link = """https://www.encodeproject.org/files/{}/@@download/{}.{}""".format(
+                fileslist[0], fileslist[0], "bam"
+            )
+            print("downloading from ", download_link)
+            save_get_resp(download_link, save_path)
 
         #bigWig#######################################################################################
-        save_dir_name = """{}/{}/{}/{}""".format(downloaddir, ct, assay, fileslist[1]+".bigWig")
-        download_link = """https://www.encodeproject.org/files/{}/@@download/{}.{}""".format(
-            fileslist[1], fileslist[1], "bigWig"
-        )
-        # download_link = """https://www.encodeproject.org/files/{}""".format(
-        #     fileslist[1]
-        # )
-        with requests.Session() as req_session:
-            download_response = req_session.get(download_link, allow_redirects=True)
-        open(save_dir_name, 'wb').write(download_response.content)
+        save_path = assay_dir + "/" + fileslist[1] + ".bigWig"
+        if os.path.isfile(save_path):
+            print(f"{save_path} already exists, skipping")
+        else:
+            download_link = """https://www.encodeproject.org/files/{}/@@download/{}.{}""".format(
+                fileslist[1], fileslist[1], "bigWig"
+            )
+            save_get_resp(download_link, save_path)
 
-        if bw2bg:
-            os.system("./bigWigToBedGraph {} {}".format(save_dir_name, save_dir_name.replace("bigWig", "bedGraph")))
-
+            if bw2bg:
+                os.system("./bigWigToBedGraph {} {}".format(save_path, save_path.replace("bigWig", "bedGraph")))
 
 def create_trackname_assay_file(download_dir):
     tracknames = []
