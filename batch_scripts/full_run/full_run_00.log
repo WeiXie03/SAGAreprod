@@ -1,0 +1,8 @@
+list of target celltypes ['K562' 'MCF-7' 'GM12878' 'HeLa-S3' 'CD14-positive monocyte']
+No download required!
+Traceback (most recent call last):
+  File "/project/6014832/wxa38/SAGAconf/run.py", line 1449, in <module>
+    assays[ct] = read_list_of_assays(download_dir+ct)
+  File "/project/6014832/wxa38/SAGAconf/run.py", line 63, in read_list_of_assays
+    ls = os.listdir(celltype_dir)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/wxa38/scratch/filesCD14-positive_monocyte'

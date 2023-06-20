@@ -1,9 +1,11 @@
 import pandas as pd
 import numpy as np
 import requests, os, itertools, ast
+from pathlib import Path
+import multiprocessing as mp
+import functools
 
-
-def search_encode(cell, download_dir, target_assembly="GRCh38", check_availability=False):
+def search_encode(cell: str, download_dir: Path, target_assembly="GRCh38", check_availability=False):
     # Force return from the server in JSON format
     headers = {'accept': 'application/json'}
 
@@ -71,12 +73,12 @@ def search_encode(cell, download_dir, target_assembly="GRCh38", check_availabili
 
     if not os.path.exists(download_dir):
         os.mkdir(download_dir)
-        os.mkdir(download_dir + cell)
+        os.mkdir(download_dir / cell)
     
-    if not os.path.exists(download_dir + cell):
-        os.mkdir(download_dir + cell)
+    if not os.path.exists(download_dir / cell):
+        os.mkdir(download_dir / cell)
 
-    with open(download_dir + cell + '/replicate_number.txt' ,'w') as rep_file:
+    with open(download_dir / cell / "replicate_number.txt" ,'w') as rep_file:
             rep_file.write("rep1:{}\nrep2:{}".format(
                 replicate_glossary['rep1'], replicate_glossary['rep2']))
 
@@ -129,8 +131,8 @@ def search_encode(cell, download_dir, target_assembly="GRCh38", check_availabili
         # define files to be downloaded
         to_download_list = {} #{"rep1_alig":None, "rep2_alig":None, "rep1_fcoc":None, "rep2_fcoc":None}
 
-        if not os.path.exists(download_dir + cell  +"/{}".format(tracks_navigation['assay'][e])):
-            os.mkdir(download_dir + cell +"/{}".format(tracks_navigation['assay'][e]))
+        if not os.path.exists(download_dir / cell / tracks_navigation['assay'][e]):
+            os.mkdir(download_dir / cell / tracks_navigation['assay'][e])
         
         for f in range(len(e_files_navigation)):
             if e_files_navigation['assembly'][f] == target_assembly:
@@ -218,43 +220,51 @@ def search_encode(cell, download_dir, target_assembly="GRCh38", check_availabili
             # biosample id , download_url, download_file_accession, 
             # signal p-value or fold change over control, genome assembly, date_added
 
-        to_download_list.to_csv(download_dir + cell + "/{}".format(tracks_navigation['assay'][e]+'/track_files_metadata.csv'))
+        to_download_list.to_csv(download_dir / cell / tracks_navigation['assay'][e] / "track_files_metadata.csv")
 
         # download navigated files
         for c in to_download_list.columns:
             if "fcoc" in c:
-                save_dir_name = download_dir + cell +"/{}".format(tracks_navigation['assay'][e])+ '/' + to_download_list.loc['accession', c] + ".bigWig"
+                save_dir_name = download_dir / cell / tracks_navigation['assay'][e] / (to_download_list.loc['accession', c] + ".bigWig")
             elif "alig" in c:
-                save_dir_name = download_dir + cell +"/{}".format(tracks_navigation['assay'][e])+ '/' + to_download_list.loc['accession', c] + ".bam"
+                save_dir_name = download_dir / cell / tracks_navigation['assay'][e] / (to_download_list.loc['accession', c] + ".bam")
             elif "spv" in c:
-                save_dir_name = download_dir + cell +"/{}".format(tracks_navigation['assay'][e])+ '/' + to_download_list.loc['accession', c] + ".bigWig"
+                save_dir_name = download_dir / cell / tracks_navigation['assay'][e] / (to_download_list.loc['accession', c] + ".bigWig")
             
             download_link = to_download_list.loc['download_url', c]
             download_response = requests.get(download_link, allow_redirects=True)
             open(save_dir_name, 'wb').write(download_response.content)
 
-def get_data_from_csv(csvfile ="data_summary.csv", downloaddir="files/", bw2bg=True):
-    summary = pd.read_csv(csvfile).drop("Unnamed: 0", axis=1)
-    summary.Celltype = summary.Celltype.astype(str)
+def download_rep_from_summ(summ_row: pd.Series, downloaddir="files", bw2bg=True, lock=None) -> None:
+    """
+    Downloads a single replicate
+    specified by given row of data summary
+    into
+    `downloaddir`/
+        <cell type>/
+            <track name>/
+                <replicate>/
+    """
+    ct = summ_row["Celltype"]
+    assay = summ_row["experiment"]
+    fileslist = summ_row["files"].split(", ")
+    print(ct, assay)
+    
+    if type(lock) == mp.Lock:
+        lock.acquire()
 
-    if os.path.exists(downloaddir) == False:
-        os.mkdir(downloaddir)
+    if os.path.exists("""{}/{}/""".format(downloaddir, ct)) == False:
+        os.mkdir("""{}/{}/""".format(downloaddir, ct))
 
-    listofct = list(set(summary.Celltype.astype(str)))
-    for i in range(summary.shape[0]):
-        ct = summary["Celltype"][i]
-        assay = summary["experiment"][i]
-        fileslist = summary["files"][i].split(", ")
-        print(ct, assay)
-        
-        if os.path.exists("""{}/{}/""".format(downloaddir, ct)) == False:
-            os.mkdir("""{}/{}/""".format(downloaddir, ct))
+    if os.path.exists("""{}/{}/{}/""".format(downloaddir, ct, assay)) == False:
+        os.mkdir("""{}/{}/{}/""".format(downloaddir, ct, assay))
 
-        if os.path.exists("""{}/{}/{}/""".format(downloaddir, ct, assay)) == False:
-            os.mkdir("""{}/{}/{}/""".format(downloaddir, ct, assay))
+    if type(lock) == mp.Lock:
+        lock.release()
 
-        #bam##########################################################################################
-        save_dir_name = """{}/{}/{}/{}""".format(downloaddir, ct, assay, fileslist[0]+".bam")
+    #bam##########################################################################################
+    save_dir_name = """{}/{}/{}/{}""".format(downloaddir, ct, assay, fileslist[0]+".bam")
+    if not os.path.isfile(save_dir_name):
         download_link = """https://www.encodeproject.org/files/{}/@@download/{}.{}""".format(
             fileslist[0], fileslist[0], "bam"
         )
@@ -264,8 +274,9 @@ def get_data_from_csv(csvfile ="data_summary.csv", downloaddir="files/", bw2bg=T
         download_response = requests.get(download_link, allow_redirects=True)
         open(save_dir_name, 'wb').write(download_response.content)
 
-        #bigWig#######################################################################################
-        save_dir_name = """{}/{}/{}/{}""".format(downloaddir, ct, assay, fileslist[1]+".bigWig")
+    #bigWig#######################################################################################
+    save_dir_name = """{}/{}/{}/{}""".format(downloaddir, ct, assay, fileslist[1]+".bigWig")
+    if not os.path.isfile(save_dir_name):
         download_link = """https://www.encodeproject.org/files/{}/@@download/{}.{}""".format(
             fileslist[1], fileslist[1], "bigWig"
         )
@@ -275,9 +286,30 @@ def get_data_from_csv(csvfile ="data_summary.csv", downloaddir="files/", bw2bg=T
         download_response = requests.get(download_link, allow_redirects=True)
         open(save_dir_name, 'wb').write(download_response.content)
 
-        if bw2bg:
-            os.system("./bigWigToBedGraph {} {}".format(save_dir_name, save_dir_name.replace("bigWig", "bedGraph")))
+    if bw2bg:
+        os.system("./bigWigToBedGraph {} {}".format(save_dir_name, save_dir_name.replace("bigWig", "bedGraph")))
 
+def get_data_from_csv(csvfile="data_summary.csv", downloaddir="files", bw2bg=True, parallel=False, n_procs=1) -> None:
+    summary = pd.read_csv(csvfile).drop("Unnamed: 0", axis=1)
+    summary.Celltype = summary.Celltype.astype(str)
+
+    if os.path.exists(downloaddir) == False:
+        os.mkdir(downloaddir)
+
+    # don't need (?)
+    #listofct = list(set(summary.Celltype.astype(str)))
+
+    # convert summary into list of 1-row DataFrames
+    summ_rows = [row[1] for row in summary.iterrows()]
+    
+    if parallel == True:
+        # DataFrame -> [..., (<row index>, <row as DataFrame>), ...]
+        with mp.Pool(n_procs) as pool:
+            # [passing "constant" args to function for map](https://stackoverflow.com/a/10834984)
+            pool.map(functools.partial(download_rep_from_summ, downloaddir=downloaddir, bw2bg=bw2bg), summ_rows)
+    else:
+        for i in range(summary.shape[0]):
+            download_rep_from_summ(summ_rows[i], downloaddir=downloaddir, bw2bg=bw2bg)
 
 def create_trackname_assay_file(download_dir):
     tracknames = []
@@ -300,13 +332,15 @@ def create_trackname_assay_file(download_dir):
             tna.write('{}\t{}\n'.format(tracknames[i][1], tracknames[i][0]))
 
 if __name__ == "__main__":
-    get_data_from_csv(csvfile ="data_summary.csv")
+    n_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK',default=1))
+    # get_data_from_csv(csvfile ="data_summary.csv", downloaddir="/home/wxa38/scratch/files/", parallel=True, n_procs=n_cpus)
 
     exit()
     CellType_list = np.array(
-        ['K562', 'MCF-7', 'GM12878', 'HeLa-S3', 'CD14-positive monocyte'])
+        ['HeLa-S3', 'CD14-positive monocyte'])
+        # ['K562', 'MCF-7', 'GM12878', 'HeLa-S3', 'CD14-positive monocyte'])
     for ct in CellType_list:
-        search_encode(ct, "files/", target_assembly="GRCh38", check_availability=False)
+        search_encode(ct, "/home/wxa38/scratch/files/", target_assembly="GRCh38", check_availability=False)
 
     # clean up potential space characters in directory names to prevent later issues
     for ct in CellType_list:

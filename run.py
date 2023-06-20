@@ -13,6 +13,8 @@ import glob, os
 import multiprocessing as mp
 from functools import partial
 import matplotlib
+import argparse
+from pathlib import Path
 
 '''
 
@@ -39,7 +41,7 @@ ChromHMM:
 
 '''
 
-def download_encode_files(celltype_list, download_dir, target_assembly):
+def download_encode_files(celltype_list: list[str], download_dir: Path, target_assembly: str):
     for celltype in celltype_list:
         search_encode(celltype, download_dir, target_assembly=target_assembly)
 
@@ -551,7 +553,7 @@ def concat_RunParse_segway(celltype_dir, output_dir, random_seed=73):
         "posteriordir_rep2":output_dir+name_sig+'_concat_posterior_2'}
 
     if os.path.exists(concat_param_dict['name_sig_rep1']) == False or \
-         os.path.exists(concat_param_dict['name_sig_rep2']) == False:
+        os.path.exists(concat_param_dict['name_sig_rep2']) == False:
         print('Running Segway concatenated celltype {}...'.format(celltype_dir))
         concat_segwayrun_and_postprocess(concat_param_dict)
 
@@ -1381,6 +1383,17 @@ def RUN_ALL_REPROD_ANALYSIS(runs_dir, CellType_list, output_dir, multi_p=True, t
             for r in list_of_runs:
                 run_single_short_report(r)
 
+def init_argparser(parser: argparse.ArgumentParser) -> argparse.Namespace:
+    """
+    - downloads dir
+    - dir for segway runs
+    - dir for final reports
+    """
+    parser.add_argument("download_dir", type=Path, help="Path to directory of data (contains subdirectories for cell types)")
+    parser.add_argument("segway_runs_dir", type=Path, help="Path to directory in which to put output of Segway, including posteriors")
+    parser.add_argument("results_dir", type=Path, help="Path to directory in which to put results of reproducibility analysis")
+    return parser.parse_args()
+
 """when running the whole script from start to end to generate (and reproduce) results
 remember to put label interpretation in try blocks (skippable) to prevent any kind of
 dependency issue of segtools to cause issues in reproducibility of results"""
@@ -1389,15 +1402,20 @@ if __name__=="__main__":
     CellType_list = np.array(
         ['K562', 'MCF-7', 'GM12878', 'HeLa-S3', 'CD14-positive monocyte'])
 
-    download_dir = 'files/'
-    segway_dir = 'segway_runs/'
-    res_dir = 'reprod_results/'
+    # download_dir = 'files/'
+    # segway_dir = 'segway_runs/'
+    # res_dir = 'reprod_results/'
+    parser = argparse.ArgumentParser()
+    args = init_argparser(parser)
+    download_dir = args.download_dir
+    segway_dir = args.segway_runs_dir
+    res_dir = args.results_dir
 
     if os.path.exists(res_dir) == False:
         os.mkdir(res_dir)
 
     print('list of target celltypes', CellType_list)
-    existing_data = np.array(check_if_data_exists(CellType_list, download_dir))
+    existing_data = np.array(check_if_data_exists(CellType_list, str(download_dir)))
     CellType_list = [CellType_list[i] for i in range(len(CellType_list)) if existing_data[i]==False]
 
     if len(CellType_list) != 0:
@@ -1405,16 +1423,25 @@ if __name__=="__main__":
     else:
         print('No download required!')
 
-    CellType_list = [ct for ct in os.listdir(download_dir) if os.path.isdir(download_dir+ct)]
+    CellType_list = [ct for ct in os.listdir(download_dir) if os.path.isdir(download_dir / ct)]
 
     # clean up potential space characters in directory names to prevent later issues
     for ct in CellType_list:
         if " " in ct:
+            ct_dir = download_dir / ct
             os.system("mv {} {}".format(
-                ct.replace(' ', '\ '), ct.replace(" ", "_")
+                ct_dir.replace(' ', '\ '), ct_dir.replace(" ", "_")
             ))
 
-    CellType_list = [ct for ct in os.listdir(download_dir) if os.path.isdir(download_dir+ct)]
+    CellType_list = [ct for ct in os.listdir(download_dir) if os.path.isdir(download_dir / ct)]
+
+    download_dir = str(args.download_dir)
+    segway_dir = str(args.segway_runs_dir)
+    res_dir = str(args.results_dir)
+    for path in (download_dir, segway_dir, res_dir):
+        if path[-1] != '/':
+            path += '/'
+
     create_trackname_assay_file(download_dir)
 
     assays = {}
@@ -1461,6 +1488,7 @@ if __name__=="__main__":
     if os.path.exists(segway_dir) == False:
         os.mkdir(segway_dir)
 
+    print("Starting Segway runs")
     # Run segway replicates     MP
     partial_runs_i = partial(
         RunParse_segway_replicates, output_dir=segway_dir, random_seed=73)
