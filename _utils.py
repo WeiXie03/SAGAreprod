@@ -2,6 +2,41 @@ import pandas as pd
 import numpy as np
 import shutil, os, functools, itertools
 import multiprocessing as mp
+import time
+import queue
+import multiprocessing
+import multiprocessing.managers
+ 
+# ==========
+
+# Queue for multiprocessing nested loops
+# Thanks to https://superfastpython.com/parallel-nested-for-loops-in-python/#Single_Process_Pool_and_Shared_Queue_unbounded
+# example of a nested for-loop to use a single shared process pool with a queue unbounded
+# ---
+# custom counter class
+class SafeCounter():
+    def __init__(self, count):
+        self._lock = multiprocessing.Lock()
+        self._value = count
+ 
+    def is_zero(self):
+        with self._lock:
+            return self._value == 0
+ 
+    def increment(self, value=1):
+        with self._lock:
+            self._value += value
+ 
+    def decrement(self, value=1):
+        with self._lock:
+            self._value -= value
+ 
+# custom manager to support custom classes
+class CustomManager(multiprocessing.managers.BaseManager):
+    # nothing
+    pass
+
+# ===============
 
 def read_bedgraph(bg_file):
     df = []
@@ -346,3 +381,5 @@ def logit_array(array2D):
             array2D[i,j] = logit(array2D[i,j])
 
     return array2D
+
+

@@ -1435,12 +1435,11 @@ if __name__=="__main__":
 
     CellType_list = [ct for ct in os.listdir(download_dir) if os.path.isdir(download_dir / ct)]
 
-    download_dir = str(args.download_dir)
-    segway_dir = str(args.segway_runs_dir)
-    res_dir = str(args.results_dir)
+    download_dir = str(args.download_dir)+'/'
+    segway_dir = str(args.segway_runs_dir)+'/'
+    res_dir = str(args.results_dir)+'/'
     for path in (download_dir, segway_dir, res_dir):
-        if path[-1] != '/':
-            path += '/'
+        print(path)
 
     create_trackname_assay_file(download_dir)
 
